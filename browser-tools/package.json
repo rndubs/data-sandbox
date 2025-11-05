@@ -1,0 +1,14 @@
+{
+  "name": "browser-tools",
+  "version": "1.0.0",
+  "description": "Simple browser automation tools for Claude using Puppeteer",
+  "type": "module",
+  "scripts": {
+    "screenshot": "node screenshot.js",
+    "navigate": "node navigate.js",
+    "evaluate": "node evaluate.js"
+  },
+  "dependencies": {
+    "puppeteer-core": "^22.0.0"
+  }
+}
