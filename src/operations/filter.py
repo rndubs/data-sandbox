@@ -57,8 +57,8 @@ class FilterOperation(Operation):
 
             # Extract values and compute sample rate
             values = channel_data['value'].values
-            timestamps = channel_data['timestamp'].values
-            time_diffs = pd.to_datetime(timestamps).diff().dt.total_seconds().dropna()
+            timestamps = pd.to_datetime(channel_data['timestamp'])
+            time_diffs = timestamps.diff().dt.total_seconds().dropna()
             sample_rate = 1.0 / time_diffs.mean() if len(time_diffs) > 0 else 1.0
 
             # Design Butterworth filter
