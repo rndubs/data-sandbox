@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   # PostgreSQL for metadata storage
   postgres:
@@ -61,6 +59,8 @@ services:
       dockerfile: docker/Dockerfile.api
     container_name: ts-api
     environment:
+      PYTHONUNBUFFERED: 1
+      PYTHONDONTWRITEBYTECODE: 1
       DATABASE_URL: postgresql://tsuser:tspassword@postgres:5432/timeseries_metadata
       MINIO_ENDPOINT: minio:9000
       MINIO_ACCESS_KEY: minioadmin
@@ -72,13 +72,17 @@ services:
     volumes:
       - ./src:/app/src
       - ./sdk:/app/sdk
+      - ./tests:/app/tests
+      - ./scripts:/app/scripts
+      - ./examples:/app/examples
+      - ./data:/app/data
       - duckdb_data:/data
     depends_on:
       postgres:
         condition: service_healthy
       minio:
         condition: service_healthy
-    command: uvicorn src.api.main:app --host 0.0.0.0 --port 8000 --reload
+    command: uvicorn src.api.main:app --host 0.0.0.0 --port 8000
 
   # Web client
   web:

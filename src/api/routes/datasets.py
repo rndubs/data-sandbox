@@ -1,8 +1,8 @@
 """API routes for dataset management."""
 
-from fastapi import APIRouter, Depends, UploadFile, File, HTTPException
+from fastapi import APIRouter, Depends, UploadFile, File, Form, HTTPException
 from sqlalchemy.orm import Session
-from typing import List
+from typing import List, Optional
 from uuid import UUID
 from pathlib import Path
 import pandas as pd
@@ -20,8 +20,8 @@ router = APIRouter()
 @router.post("/upload", response_model=DatasetResponse, status_code=201)
 async def upload_dataset(
     file: UploadFile = File(...),
-    name: str = None,
-    description: str = None,
+    name: Optional[str] = Form(None),
+    description: Optional[str] = Form(None),
     db: Session = Depends(get_db_session)
 ):
     """Upload a time series dataset (CSV file).
@@ -69,17 +69,17 @@ async def upload_dataset(
             # Calculate sample rate
             time_diffs = df['timestamp'].diff().dt.total_seconds().dropna()
             if len(time_diffs) > 0:
-                sample_rate = 1.0 / time_diffs.mean()
+                sample_rate = float(1.0 / time_diffs.mean())
 
         # Create dataset record
         dataset = Dataset(
             name=name or file.filename,
             description=description,
             file_location=object_name,
-            row_count=row_count,
+            row_count=int(row_count) if row_count is not None else None,
             start_time=start_time,
             end_time=end_time,
-            channel_count=channel_count,
+            channel_count=int(channel_count) if channel_count is not None else None,
             sample_rate=sample_rate
         )
 

@@ -17,27 +17,34 @@ logger = logging.getLogger(__name__)
 
 
 @task(name="load_dataset")
-def load_dataset_task(dataset_id: UUID, db_session: Session) -> pd.DataFrame:
+def load_dataset_task(dataset_id: UUID) -> pd.DataFrame:
     """Load dataset from storage.
 
     Args:
         dataset_id: UUID of dataset to load
-        db_session: Database session
 
     Returns:
         DataFrame with time series data
     """
+    from src.database import get_db_session
+
     logger.info(f"Loading dataset: {dataset_id}")
 
-    # Get dataset metadata
-    dataset = db_session.query(Dataset).filter(Dataset.id == dataset_id).first()
-    if not dataset:
-        raise ValueError(f"Dataset not found: {dataset_id}")
+    # Get dataset metadata with new session
+    db_session = next(get_db_session())
+    try:
+        dataset = db_session.query(Dataset).filter(Dataset.id == dataset_id).first()
+        if not dataset:
+            raise ValueError(f"Dataset not found: {dataset_id}")
+
+        file_location = dataset.file_location
+    finally:
+        db_session.close()
 
     # Download from MinIO to temp location
     minio_client = MinIOClient()
     temp_path = Path(f"/tmp/{dataset_id}.csv")
-    minio_client.download_file(dataset.file_location, temp_path)
+    minio_client.download_file(file_location, temp_path)
 
     # Load into DuckDB
     duckdb_client = DuckDBClient()
@@ -56,8 +63,7 @@ def execute_operation_task(
     node_id: UUID,
     operation_type: str,
     operation_config: Dict[str, Any],
-    input_data: pd.DataFrame,
-    db_session: Session
+    input_data: pd.DataFrame
 ) -> tuple[pd.DataFrame, UUID]:
     """Execute a single operation.
 
@@ -66,11 +72,12 @@ def execute_operation_task(
         operation_type: Type of operation to execute
         operation_config: Operation configuration
         input_data: Input DataFrame
-        db_session: Database session
 
     Returns:
         Tuple of (output DataFrame, output dataset UUID)
     """
+    from src.database import get_db_session
+
     logger.info(f"Executing node {node_id}: {operation_type}")
 
     start_time = datetime.utcnow()
@@ -87,78 +94,91 @@ def execute_operation_task(
         output_data.to_csv(temp_output, index=False)
         minio_client.upload_file(temp_output, output_filename)
 
-        # Create dataset record
-        dataset = Dataset(
-            name=f"Output of {operation_type} (node {node_id})",
-            file_location=output_filename,
-            row_count=len(output_data),
-        )
-        db_session.add(dataset)
-        db_session.flush()
+        # Create dataset record and update node with new session
+        db_session = next(get_db_session())
+        try:
+            dataset = Dataset(
+                name=f"Output of {operation_type} (node {node_id})",
+                file_location=output_filename,
+                row_count=int(len(output_data)),
+            )
+            db_session.add(dataset)
+            db_session.flush()
 
-        # Update node with output dataset
-        node = db_session.query(Node).filter(Node.id == node_id).first()
-        node.output_dataset_id = dataset.id
-        node.status = "completed"
-        node.execution_time_ms = int((datetime.utcnow() - start_time).total_seconds() * 1000)
-        node.completed_at = datetime.utcnow()
+            # Update node with output dataset
+            node = db_session.query(Node).filter(Node.id == node_id).first()
+            node.output_dataset_id = dataset.id
+            node.status = "completed"
+            node.execution_time_ms = int((datetime.utcnow() - start_time).total_seconds() * 1000)
+            node.completed_at = datetime.utcnow()
 
-        db_session.commit()
+            db_session.commit()
+            dataset_id = dataset.id
+        finally:
+            db_session.close()
 
         logger.info(f"Node {node_id} completed successfully")
-        return output_data, dataset.id
+        return output_data, dataset_id
 
     except Exception as e:
         # Update node with error
-        node = db_session.query(Node).filter(Node.id == node_id).first()
-        node.status = "failed"
-        node.error_message = str(e)
-        db_session.commit()
+        db_session = next(get_db_session())
+        try:
+            node = db_session.query(Node).filter(Node.id == node_id).first()
+            node.status = "failed"
+            node.error_message = str(e)
+            db_session.commit()
+        finally:
+            db_session.close()
 
         logger.error(f"Node {node_id} failed: {e}")
         raise
 
 
 @flow(name="execute_workflow")
-def execute_workflow_flow(workflow_id: UUID, db_session: Session) -> Dict[str, Any]:
+def execute_workflow_flow(workflow_id: UUID) -> Dict[str, Any]:
     """Execute a complete workflow.
 
     Args:
         workflow_id: UUID of workflow to execute
-        db_session: Database session
 
     Returns:
         Dictionary with execution results
     """
+    from src.database import get_db_session
+
     logger.info(f"Starting workflow execution: {workflow_id}")
 
-    # Get workflow and nodes
-    workflow = db_session.query(Workflow).filter(Workflow.id == workflow_id).first()
-    if not workflow:
-        raise ValueError(f"Workflow not found: {workflow_id}")
-
-    # Update workflow status
-    workflow.status = "running"
-    db_session.commit()
-
+    # Get workflow and nodes with new session
+    db_session = next(get_db_session())
     try:
+        workflow = db_session.query(Workflow).filter(Workflow.id == workflow_id).first()
+        if not workflow:
+            raise ValueError(f"Workflow not found: {workflow_id}")
+
+        # Update workflow status
+        workflow.status = "running"
+        db_session.commit()
+
         # Get all nodes and edges
         nodes = db_session.query(Node).filter(Node.workflow_id == workflow_id).all()
         edges = db_session.query(Edge).filter(Edge.workflow_id == workflow_id).all()
 
-        # Build dependency graph
-        node_map = {node.id: node for node in nodes}
+        # Build dependency graph - extract only the data we need
+        node_data = {node.id: {
+            'operation_type': node.operation_type,
+            'operation_config': node.operation_config or {},
+            'input_dataset_id': node.input_dataset_id
+        } for node in nodes}
+
         dependencies = {node.id: [] for node in nodes}
 
         for edge in edges:
             dependencies[edge.to_node_id].append(edge.from_node_id)
+    finally:
+        db_session.close()
 
-        # Find nodes with no dependencies (starting nodes)
-        starting_nodes = [
-            node_id for node_id, deps in dependencies.items()
-            if len(deps) == 0
-        ]
-
+    try:
         # Topological sort to determine execution order
         execution_order = topological_sort(dependencies)
 
@@ -166,12 +186,12 @@ def execute_workflow_flow(workflow_id: UUID, db_session: Session) -> Dict[str, A
         node_outputs = {}
 
         for node_id in execution_order:
-            node = node_map[node_id]
+            node_info = node_data[node_id]
 
             # Get input data
-            if node.input_dataset_id:
+            if node_info['input_dataset_id']:
                 # Load from dataset
-                input_data = load_dataset_task(node.input_dataset_id, db_session)
+                input_data = load_dataset_task(node_info['input_dataset_id'])
             elif dependencies[node_id]:
                 # Use output from previous node
                 prev_node_id = dependencies[node_id][0]  # For POC, assume single input
@@ -182,18 +202,22 @@ def execute_workflow_flow(workflow_id: UUID, db_session: Session) -> Dict[str, A
             # Execute operation
             output_data, output_dataset_id = execute_operation_task(
                 node_id,
-                node.operation_type,
-                node.operation_config or {},
-                input_data,
-                db_session
+                node_info['operation_type'],
+                node_info['operation_config'],
+                input_data
             )
 
             node_outputs[node_id] = output_data
 
         # Update workflow status
-        workflow.status = "completed"
-        workflow.completed_at = datetime.utcnow()
-        db_session.commit()
+        db_session = next(get_db_session())
+        try:
+            workflow = db_session.query(Workflow).filter(Workflow.id == workflow_id).first()
+            workflow.status = "completed"
+            workflow.completed_at = datetime.utcnow()
+            db_session.commit()
+        finally:
+            db_session.close()
 
         logger.info(f"Workflow {workflow_id} completed successfully")
 
@@ -205,8 +229,13 @@ def execute_workflow_flow(workflow_id: UUID, db_session: Session) -> Dict[str, A
 
     except Exception as e:
         # Update workflow status
-        workflow.status = "failed"
-        db_session.commit()
+        db_session = next(get_db_session())
+        try:
+            workflow = db_session.query(Workflow).filter(Workflow.id == workflow_id).first()
+            workflow.status = "failed"
+            db_session.commit()
+        finally:
+            db_session.close()
 
         logger.error(f"Workflow {workflow_id} failed: {e}")
         raise
@@ -250,9 +279,11 @@ class WorkflowExecutor:
         """Initialize executor.
 
         Args:
-            db_session: Database session
+            db_session: Database session (kept for compatibility, not used internally)
         """
-        self.db_session = db_session
+        # Note: db_session parameter kept for backwards compatibility but not used
+        # Each Prefect task creates its own session to avoid serialization issues
+        pass
 
     def execute(self, workflow_id: UUID) -> Dict[str, Any]:
         """Execute a workflow.
@@ -263,4 +294,4 @@ class WorkflowExecutor:
         Returns:
             Execution results
         """
-        return execute_workflow_flow(workflow_id, self.db_session)
+        return execute_workflow_flow(workflow_id)
