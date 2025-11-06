@@ -1,0 +1,103 @@
+services:
+  # PostgreSQL for metadata storage
+  postgres:
+    image: postgres:16-alpine
+    container_name: ts-postgres
+    environment:
+      POSTGRES_DB: timeseries_metadata
+      POSTGRES_USER: tsuser
+      POSTGRES_PASSWORD: tspassword
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U tsuser -d timeseries_metadata"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # MinIO for object storage (S3-compatible)
+  minio:
+    image: minio/minio:latest
+    container_name: ts-minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # MinIO client to create initial bucket
+  minio-init:
+    image: minio/mc:latest
+    container_name: ts-minio-init
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+      mc alias set myminio http://minio:9000 minioadmin minioadmin;
+      mc mb myminio/timeseries-data --ignore-existing;
+      mc anonymous set download myminio/timeseries-data;
+      exit 0;
+      "
+
+  # FastAPI backend service
+  api:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.api
+    container_name: ts-api
+    environment:
+      PYTHONUNBUFFERED: 1
+      PYTHONDONTWRITEBYTECODE: 1
+      DATABASE_URL: postgresql://tsuser:tspassword@postgres:5432/timeseries_metadata
+      MINIO_ENDPOINT: minio:9000
+      MINIO_ACCESS_KEY: minioadmin
+      MINIO_SECRET_KEY: minioadmin
+      MINIO_BUCKET: timeseries-data
+      DUCKDB_PATH: /data/timeseries.duckdb
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./src:/app/src
+      - ./sdk:/app/sdk
+      - ./tests:/app/tests
+      - ./scripts:/app/scripts
+      - ./examples:/app/examples
+      - ./data:/app/data
+      - duckdb_data:/data
+    depends_on:
+      postgres:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    command: uvicorn src.api.main:app --host 0.0.0.0 --port 8000
+
+  # Web client
+  web:
+    build:
+      context: ./web
+      dockerfile: Dockerfile
+    container_name: ts-web
+    ports:
+      - "3000:80"
+    depends_on:
+      - api
+    environment:
+      VITE_API_URL: http://localhost:8000
+
+volumes:
+  postgres_data:
+  minio_data:
+  duckdb_data:

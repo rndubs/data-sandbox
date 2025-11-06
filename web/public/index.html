@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Time Series Platform</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+</head>
+<body class="bg-gray-100">
+    <div class="container mx-auto px-4 py-8">
+        <!-- Header -->
+        <header class="mb-8">
+            <h1 class="text-4xl font-bold text-gray-800">Time Series Data Platform</h1>
+            <p class="text-gray-600 mt-2">Manage and visualize time series workflows</p>
+        </header>
+
+        <!-- Tabs -->
+        <div class="mb-6">
+            <div class="border-b border-gray-200">
+                <nav class="-mb-px flex space-x-8">
+                    <button onclick="showTab('datasets')" id="tab-datasets" class="tab-button border-b-2 border-blue-500 py-4 px-1 text-sm font-medium text-blue-600">
+                        Datasets
+                    </button>
+                    <button onclick="showTab('workflows')" id="tab-workflows" class="tab-button border-b-2 border-transparent py-4 px-1 text-sm font-medium text-gray-500 hover:text-gray-700 hover:border-gray-300">
+                        Workflows
+                    </button>
+                    <button onclick="showTab('visualization')" id="tab-visualization" class="tab-button border-b-2 border-transparent py-4 px-1 text-sm font-medium text-gray-500 hover:text-gray-700 hover:border-gray-300">
+                        Visualization
+                    </button>
+                </nav>
+            </div>
+        </div>
+
+        <!-- Datasets Tab -->
+        <div id="content-datasets" class="tab-content">
+            <div class="bg-white rounded-lg shadow p-6 mb-6">
+                <h2 class="text-2xl font-bold mb-4">Upload Dataset</h2>
+                <div class="flex items-center space-x-4">
+                    <input type="file" id="fileInput" accept=".csv" class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100">
+                    <button onclick="uploadDataset()" class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded">
+                        Upload
+                    </button>
+                </div>
+            </div>
+
+            <div class="bg-white rounded-lg shadow p-6">
+                <h2 class="text-2xl font-bold mb-4">Datasets</h2>
+                <button onclick="loadDatasets()" class="mb-4 bg-gray-500 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded text-sm">
+                    Refresh
+                </button>
+                <div id="datasetsList" class="space-y-2">
+                    <!-- Datasets will be loaded here -->
+                </div>
+            </div>
+        </div>
+
+        <!-- Workflows Tab -->
+        <div id="content-workflows" class="tab-content hidden">
+            <div class="bg-white rounded-lg shadow p-6 mb-6">
+                <h2 class="text-2xl font-bold mb-4">Create Workflow</h2>
+                <div class="space-y-4">
+                    <input type="text" id="workflowName" placeholder="Workflow name" class="w-full px-3 py-2 border border-gray-300 rounded">
+                    <button onclick="createWorkflow()" class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded">
+                        Create Workflow
+                    </button>
+                </div>
+            </div>
+
+            <div class="bg-white rounded-lg shadow p-6">
+                <h2 class="text-2xl font-bold mb-4">Workflows</h2>
+                <button onclick="loadWorkflows()" class="mb-4 bg-gray-500 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded text-sm">
+                    Refresh
+                </button>
+                <div id="workflowsList" class="space-y-2">
+                    <!-- Workflows will be loaded here -->
+                </div>
+            </div>
+        </div>
+
+        <!-- Visualization Tab -->
+        <div id="content-visualization" class="tab-content hidden">
+            <div class="bg-white rounded-lg shadow p-6 mb-6">
+                <h2 class="text-2xl font-bold mb-4">Select Workflow</h2>
+                <select id="vizWorkflowSelect" onchange="loadWorkflowDAG()" class="w-full px-3 py-2 border border-gray-300 rounded mb-4">
+                    <option value="">Select a workflow...</option>
+                </select>
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <!-- DAG Visualization -->
+                <div class="bg-white rounded-lg shadow p-6">
+                    <h2 class="text-xl font-bold mb-4">Workflow DAG</h2>
+                    <div id="dagViz" class="border border-gray-200 rounded" style="height: 400px;">
+                        <!-- DAG visualization will be rendered here -->
+                    </div>
+                </div>
+
+                <!-- Plot Visualization -->
+                <div class="bg-white rounded-lg shadow p-6">
+                    <h2 class="text-xl font-bold mb-4">Data Visualization</h2>
+                    <div class="mb-4">
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Select Node:</label>
+                        <select id="nodeSelect" onchange="loadPlot()" class="w-full px-3 py-2 border border-gray-300 rounded">
+                            <option value="">Select a node...</option>
+                        </select>
+                    </div>
+                    <div id="plotViz">
+                        <!-- Plot will be rendered here -->
+                    </div>
+                </div>
+            </div>
+
+            <!-- Side-by-side comparison -->
+            <div class="bg-white rounded-lg shadow p-6 mt-6">
+                <h2 class="text-xl font-bold mb-4">Multi-Node Comparison</h2>
+                <div id="comparisonPlots" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <!-- Comparison plots will be rendered here -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
