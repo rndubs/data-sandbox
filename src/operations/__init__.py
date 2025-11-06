@@ -5,12 +5,14 @@ from src.operations.base import Operation
 from src.operations.fft import FFTOperation
 from src.operations.filter import FilterOperation
 from src.operations.unit_conversion import UnitConversionOperation
+from src.operations.time_shift import TimeShiftOperation
 
 # Operation registry
 OPERATIONS = {
     'fft': FFTOperation,
     'filter': FilterOperation,
     'unit_conversion': UnitConversionOperation,
+    'time_shift': TimeShiftOperation,
 }
 
 
@@ -51,6 +53,7 @@ __all__ = [
     'FFTOperation',
     'FilterOperation',
     'UnitConversionOperation',
+    'TimeShiftOperation',
     'create_operation',
     'get_available_operations',
     'OPERATIONS',

@@ -194,8 +194,9 @@ async function executeWorkflow(workflowId) {
     }
 }
 
-function viewWorkflow(workflowId) {
+async function viewWorkflow(workflowId) {
     showTab('visualization');
+    await populateWorkflowSelect();
     document.getElementById('vizWorkflowSelect').value = workflowId;
     loadWorkflowDAG();
 }
