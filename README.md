@@ -145,9 +145,18 @@ plot_data = client.get_node_plot(fft_node, channel_id=0)
 ### Using the Web Interface
 
 1. Open http://localhost:3000
-2. **Datasets Tab**: Upload CSV files
-3. **Workflows Tab**: Create and execute workflows
-4. **Visualization Tab**: View DAG and plots
+2. **Datasets Tab**: Upload and manage CSV files
+3. **Workflows Tab**:
+   - Create new workflows
+   - Use the **Workflow Builder** to add operation nodes (filter, FFT, unit conversion, time shift)
+   - Configure each operation with specific parameters
+   - Connect nodes to build your processing pipeline
+4. **Visualization Tab**:
+   - View interactive workflow DAG (click nodes to view their data)
+   - Execute or rerun workflows with one click
+   - View individual node data with customizable channels
+   - See all node data snapshots at once
+   - Compare multiple nodes side-by-side with selective plotting
 
 ### Using the REST API
 
@@ -169,6 +178,45 @@ curl -X POST "http://localhost:8000/api/workflows/" \
 # Get workflow DAG
 curl "http://localhost:8000/api/workflows/{workflow_id}/dag"
 ```
+
+## Creating Workflows via Web UI
+
+The web interface provides a complete workflow builder for creating data processing pipelines:
+
+### Step-by-Step Workflow Creation:
+
+1. **Upload Dataset** (Datasets Tab):
+   - Click "Choose File" and select your CSV file
+   - Click "Upload" to store the dataset
+
+2. **Create Workflow** (Workflows Tab):
+   - Enter a workflow name
+   - Click "Create Workflow"
+
+3. **Build Pipeline** (Workflow Builder):
+   - Select your workflow from the dropdown
+   - For each operation node:
+     - Enter a descriptive name (e.g., "Low-pass Filter 50Hz")
+     - Select operation type (Filter, FFT, Unit Conversion, Time Shift)
+     - Configure operation-specific parameters
+     - Select input dataset (for first node only)
+     - Click "Add Node"
+   - Connect nodes:
+     - Select "From Node" (parent)
+     - Select "To Node" (child)
+     - Click "Connect Nodes"
+
+4. **Execute Workflow** (Visualization Tab):
+   - Select your workflow from the dropdown
+   - View the DAG structure
+   - Click "Execute" to run the workflow
+   - Click "Rerun" to re-execute after changes
+
+5. **View Results**:
+   - Click any node in the DAG to view its output data
+   - Scroll down to see all node snapshots
+   - Select nodes to compare in the side-by-side plotter
+   - Change channels to view different data streams
 
 ## Available Operations
 
